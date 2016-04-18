@@ -102,3 +102,39 @@ sys_halt(void)
     outw(0xB004, 0x2000);
   return 0;
 }
+
+int sys_clone(void){
+  int add;
+  int arg;
+  int stack_add;
+
+  if(argint(0, &add) < 0){ return -1; }
+  if(argint(1, &arg) <0) {  return -1;}
+  if(argint(2, &stack_add)){return -1; }
+   
+  return clone((void*)add, (void*)arg, (void*) stack_add);
+}
+
+int sys_join(void){
+   int pid;
+   int stack_add;
+   int retval;
+   
+   if(argint(0, &pid) < 0){ return -1; }
+   if(argint(1, &stack_add) < 0){return -1;}
+   if(argint(2, &retval) < 0){return -1; }
+   
+   join((int) pid, (void **)stack_add, (void **)retval);
+   return 0; 
+}
+
+int sys_texit(void){
+   int retval;
+
+   if(argint(0, &retval) < 0){return -1;}
+
+   texit((void*) retval);
+
+   return 0;
+}
+

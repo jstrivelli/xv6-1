@@ -463,3 +463,92 @@ procdump(void)
     cprintf("\n");
   }
 }
+
+int clone(void (*func)(void *), void *arg, void* stack){
+    int i;
+    int pid;
+    struct proc *np;
+    int *thisarg;
+    int *thisret;
+    
+    if((np = allocproc()) == 0){return -1; }
+    
+    np->pgdir = proc->pgdir;
+    np->sz = proc->sz;
+    np->parent = proc;
+    *np->tf = *proc->tf;
+    np->stack = stack;
+    
+    np->tf->eax = 0;
+    np->tf->eip = (int)func;
+    
+    thisret = stack + 4096 * sizeof(int *);
+    *thisret = 0xFFFFFFFF;
+    thisarg = stack + 4096 - sizeof(int *);
+    *thisarg = (int)arg;
+
+    np->tf->esp = (int)stack + PGSIZE -2 * sizeof(int *);
+    np->tf->ebp = np->tf->esp;
+    
+    np->isthread = 1;
+    
+    for(i = 0; i< NOFILE; i++){
+      if(proc->ofile[i])
+         np->ofile[i] = filedup(proc->ofile[i]);
+    }
+
+    np->cwd = idup(proc->cwd);
+
+    safestrcpy(np->name, proc->name, sizeof(proc->name));
+    
+    pid = np->pid;
+
+    acquire(&ptable.lock);
+    np->state = RUNNABLE;
+    release(&ptable.lock);
+
+    return pid;
+                    
+}
+
+int join(int pid, void** stack, void**retval){
+  struct proc *p;
+  int kids;
+  
+  acquire(&ptable.lock);
+  for(;;){
+    kids = 0;
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+        if(p->parent != proc || p->isthread != 1)
+           continue;
+ 	kids = 1;
+        
+        if(p->state == ZOMBIE && p->pid == pid){
+           pid = p->pid;
+           kfree(p->kstack);
+           p->kstack = 0;
+           p->state = UNUSED;
+           p->pid = 0;
+           p->parent = 0;
+           p->name[0] = 0;
+           p->killed = 0;
+           *stack = p->stack;
+           release(&ptable.lock);
+           return pid;      
+        }
+    }
+
+    if(!kids || proc->killed == 1){
+        release(&ptable.lock);
+        return -1;
+    }
+   
+    sleep(proc, &ptable.lock);
+  }
+
+  return 0;
+}
+
+void texit(void* retval){
+  struct proc *p; 
+}
