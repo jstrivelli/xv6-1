@@ -33,3 +33,8 @@ SYSCALL(halt)
 SYSCALL(clone)
 SYSCALL(join)
 SYSCALL(texit)
+SYSCALL(mutex_init)
+SYSCALL(mutex_destroy)
+SYSCALL(mutex_lock)
+SYSCALL(mutex_unlock)
+

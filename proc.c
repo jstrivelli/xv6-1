@@ -128,7 +128,7 @@ growproc(int n)
 int
 fork(void)
 {
-  int i, pid;
+  int i, pid, a;
   struct proc *np;
 
   // Allocate process.
@@ -157,10 +157,16 @@ fork(void)
   safestrcpy(np->name, proc->name, sizeof(proc->name));
  
   pid = np->pid;
-
+   
   // lock to force the compiler to emit the np->state write last.
   acquire(&ptable.lock);
   np->state = RUNNABLE;
+  //Mutex initializing the spin lock
+  for(a = 0; a< 32; a++){
+       np->mtable[a].active = 0;
+       np->mtable[a].locked = 0;
+       initlock(&(proc->mtable[a].sl), "lock");
+  }
   release(&ptable.lock);
   
   return pid;
@@ -200,6 +206,15 @@ exit(void)
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if(p->parent == proc){
       p->parent = initproc;
+      if(p->isthread == 1)
+      {
+        void * stack;
+	void * retval;
+       
+	kill(p->pid);
+	join(p->pid,&stack,&retval);
+      
+	}
       if(p->state == ZOMBIE)
         wakeup1(initproc);
     }
@@ -464,51 +479,56 @@ procdump(void)
   }
 }
 
-int clone(void (*func)(void *), void *arg, void* stack){
-    int i;
-    int pid;
-    struct proc *np;
-    int *thisarg;
-    int *thisret;
-    
-    if((np = allocproc()) == 0){return -1; }
-    
-    np->pgdir = proc->pgdir;
-    np->sz = proc->sz;
-    np->parent = proc;
-    *np->tf = *proc->tf;
-    np->stack = stack;
-    
-    np->tf->eax = 0;
-    np->tf->eip = (int)func;
-    
-    thisret = stack + 4096 * sizeof(int *);
-    *thisret = 0xFFFFFFFF;
-    thisarg = stack + 4096 - sizeof(int *);
-    *thisarg = (int)arg;
 
-    np->tf->esp = (int)stack + PGSIZE -2 * sizeof(int *);
-    np->tf->ebp = np->tf->esp;
-    
-    np->isthread = 1;
-    
-    for(i = 0; i< NOFILE; i++){
-      if(proc->ofile[i])
-         np->ofile[i] = filedup(proc->ofile[i]);
-    }
+int clone( void (*func)(void *), void *arg, void *stack ){
+	int i;
+        int  pid;
+        int a;
+	// new process
+ 	struct proc *np;
+ 	// Attempt to allocate memory for process.
+	if((np = allocproc()) == 0){
+	// process has failed
+ 	return -1;
+	}
 
-    np->cwd = idup(proc->cwd);
+	np->pgdir = proc->pgdir ;
+  	np->sz = proc->sz;
+  	np->parent = proc;
+  	*np->tf = *proc->tf;
 
-    safestrcpy(np->name, proc->name, sizeof(proc->name));
-    
-    pid = np->pid;
+	np->tf->esp = ((uint)stack) + 4096 - 4; // move esp based on size of stack
+	
+	// create a uint pointer for the address of the new argument
+	*(uint *)(np->tf->esp) = (uint)arg ;// push address of arg unto the stack
+	*(uint *)(np->tf->esp-4) = (uint)0xFFFFFFF ;
+	
+	np->tf->esp -= 4 ; // return address for function
+	np->tf->eip = (uint)func; // set instruction pointer to new function
 
-    acquire(&ptable.lock);
-    np->state = RUNNABLE;
-    release(&ptable.lock);
+	np->isthread = 1; // mark process as a thread.
+	np->stack = stack;
 
-    return pid;
-                    
+	for(i = 0; i < NOFILE; i++){
+		if(proc->ofile[i]){
+			np->ofile[i] = filedup(proc->ofile[i]);
+		}
+	}
+	np->cwd = idup(proc->cwd);
+        
+	safestrcpy(np->name, proc->name, sizeof(proc->name));
+
+	pid = np->pid;
+
+	acquire(&ptable.lock);
+	np->state = RUNNABLE;
+        //Mutexs
+        for(a = 0; a < 32; a++){
+             np->mtable[a] = proc->mtable[a];
+        }
+	release(&ptable.lock);
+
+	return pid;
 }
 
 int join(int pid, void** stack, void**retval){
@@ -534,6 +554,7 @@ int join(int pid, void** stack, void**retval){
            p->killed = 0;
            *stack = p->stack;
            release(&ptable.lock);
+           *retval = p->retval;
            return pid;      
         }
     }
@@ -549,6 +570,28 @@ int join(int pid, void** stack, void**retval){
   return 0;
 }
 
+
+//know that it's a thread
+//We might need this later
+/*
 void texit(void* retval){
-  struct proc *p; 
-}
+      acquire(&ptable.lock);
+      for(;;){
+        // Scan through table looking for thread children.
+        for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+          if(p->parent != proc){
+            continue;
+          }
+
+          // found a child thread /
+          havekids ++;
+
+          // exit any and all child threads /
+          p->state = UNUSED;
+          kfree(p->kstack);
+
+        }
+    }
+    // done exiting children, release table /
+    release(&ptable.lock);
+  }*/

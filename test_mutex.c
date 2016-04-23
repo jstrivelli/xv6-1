@@ -20,8 +20,8 @@ void *thread(void *arg)
 	printf(1, "thread %d: started...\n", *(int*)arg);
 
 	for (i=0; i<TARGET_COUNT_PER_THREAD; i++) {
+                printf(1, "WE ARE HERE\n");
 		pthread_mutex_lock(&mutex);
-		
 		counter = g_counter;
 		sleep(0);
 		counter++;
@@ -30,7 +30,7 @@ void *thread(void *arg)
 
 		pthread_mutex_unlock(&mutex);
 	}
-
+        printf(1, "I GOT TO THIS PART\n");
 	pthread_exit(arg);
 }
 

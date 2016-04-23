@@ -1,6 +1,6 @@
 // Segments in proc->gdt.
 #define NSEGS     7
-
+#include "spinlock.h"
 // Per-CPU state
 struct cpu {
   uchar id;                    // Local APIC ID; index into cpus[] below
@@ -30,6 +30,9 @@ extern int ncpu;
 extern struct cpu *cpu asm("%gs:0");       // &cpus[cpunum()]
 extern struct proc *proc asm("%gs:4");     // cpus[cpunum()].proc
 
+int             clone(void (*func) (void*), void *arg, void *stack);
+int             join(int pid, void **stack, void ** retval);
+
 //PAGEBREAK: 17
 // Saved registers for kernel context switches.
 // Don't need to save all the segment registers (%cs, etc),
@@ -51,6 +54,7 @@ struct context {
 
 enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
+
 // Per-process state
 struct proc {
   uint sz;                     // Size of process memory (bytes)
@@ -68,7 +72,9 @@ struct proc {
   char name[16];               // Process name (debugging)
   void*  stack;
   int isthread;                //flag to check if it is a flag on the current process
-};
+  void* retval;
+  mutex mtable[32];
+ };
 
 // Process memory is laid out contiguously, low addresses first:
 //   text
